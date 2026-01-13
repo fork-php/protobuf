@@ -4891,7 +4891,7 @@ class DescriptorBuilder {
     // Parses an aggregate value for a CPPTYPE_MESSAGE option and
     // saves it into *unknown_fields.
     bool SetAggregateOption(const FieldDescriptor* option_field,
-                            UnknownFieldSet* unknown_fields);
+                            UnknownFieldSet* unknown_fields, Message* options);
 
     // Convenience functions to set an int field the right way, depending on
     // its wire type (a single int CppType can represent multiple wire types).
@@ -9684,8 +9684,14 @@ bool DescriptorBuilder::OptionInterpreter::InterpretSingleOption(
   // innermost message.
   std::unique_ptr<UnknownFieldSet> unknown_fields =
       std::make_unique<UnknownFieldSet>();
-  if (!SetOptionValue(field, unknown_fields.get())) {
-    return false;  // SetOptionValue() already added the error.
+  if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
+    if (!SetAggregateOption(field, unknown_fields.get(), options)) {
+      return false;
+    }
+  } else {
+    if (!SetOptionValue(field, unknown_fields.get())) {
+      return false;  // SetOptionValue() already added the error.
+    }
   }
 
   // Now wrap the UnknownFieldSet with UnknownFieldSets corresponding to all
@@ -10154,12 +10160,8 @@ bool DescriptorBuilder::OptionInterpreter::SetOptionValue(
       unknown_fields->AddLengthDelimited(option_field->number(),
                                          uninterpreted_option_->string_value());
       break;
-
     case FieldDescriptor::CPPTYPE_MESSAGE:
-      if (!SetAggregateOption(option_field, unknown_fields)) {
-        return false;
-      }
-      break;
+      internal::Unreachable();
   }
 
   return true;
@@ -10237,7 +10239,8 @@ class AggregateErrorCollector : public io::ErrorCollector {
 // option_field, parse the supplied text-format string into this
 // message, and serialize the resulting message to produce the value.
 bool DescriptorBuilder::OptionInterpreter::SetAggregateOption(
-    const FieldDescriptor* option_field, UnknownFieldSet* unknown_fields) {
+    const FieldDescriptor* option_field, UnknownFieldSet* unknown_fields,
+    Message* options) {
   if (!uninterpreted_option_->has_aggregate_value()) {
     return AddValueError([&] {
       return absl::StrCat("Option \"", option_field->full_name(),
@@ -10263,11 +10266,18 @@ bool DescriptorBuilder::OptionInterpreter::SetAggregateOption(
   parser.SetFinder(&finder);
   if (!parser.ParseFromString(uninterpreted_option_->aggregate_value(),
                               dynamic.get())) {
-    AddValueError([&] {
-      return absl::StrCat("Error while parsing option value for \"",
-                          option_field->name(), "\": ", collector.error_);
-    });
-    return false;
+    if (get_allow_unknown(builder_->pool_)) {
+      // We can't interpret the option, but AllowUnknownDependencies() is
+      // enabled, so we will just leave it as uninterpreted.
+      AddWithoutInterpreting(*uninterpreted_option_, options);
+      return true;
+    } else {
+      AddValueError([&] {
+        return absl::StrCat("Error while parsing option value for \"",
+                            option_field->name(), "\": ", collector.error_);
+      });
+      return false;
+    }
   } else {
     std::string serial;
     ABSL_CHECK(dynamic->SerializeToString(&serial));  // Never fails
