@@ -36,6 +36,7 @@
 #include "google/protobuf/testing/googletest.h"
 #include <gtest/gtest.h>
 #include "absl/base/config.h"
+#include "absl/flags/flag.h"
 #include "absl/log/absl_check.h"
 #include "absl/log/scoped_mock_log.h"
 #include "absl/strings/cord.h"
@@ -57,9 +58,12 @@
 #include "google/protobuf/test_util2.h"
 #include "google/protobuf/wire_format_lite.h"
 
+#include "google/protobuf/test_textproto.h"
 
 // Must be included last.
 #include "google/protobuf/port_def.inc"
+
+ABSL_FLAG(UNITTEST::TestAllTypes, proto_message_test_flag, {}, "");
 
 using ::testing::IsEmpty;
 using ::testing::Not;
@@ -2225,6 +2229,40 @@ TEST(MESSAGE_TEST_NAME, AllAddMethodsOnRepeatedStringField) {
   msg.add_repeated_string({'a', 'b', 'c'});
   EXPECT_EQ(msg.repeated_string(0), "abc");
   msg.clear_repeated_string();
+}
+
+TEST(MESSAGE_TEST_NAME, AbseilFlagSupport) {
+  auto msg = absl::GetFlag(FLAGS_proto_message_test_flag);
+  // The default is empty.
+  EXPECT_THAT(msg, EqualsProto(""));
+
+  msg.set_optional_int32(17);
+
+  absl::SetFlag(&FLAGS_proto_message_test_flag, msg);
+  EXPECT_THAT(absl::GetFlag(FLAGS_proto_message_test_flag),
+              EqualsProto(R"pb(optional_int32: 17)pb"));
+
+  absl::CommandLineFlag* flag =
+      absl::FindCommandLineFlag("proto_message_test_flag");
+  EXPECT_THAT(msg, EqualsProto(flag->CurrentValue()));
+  std::string error;
+  EXPECT_TRUE(flag->ParseFrom(R"pb(
+                                optional_int32: 31
+                                optional_string: "str"
+                                optional_nested_message { bb: 11 }
+                              )pb",
+                              &error));
+  EXPECT_THAT(absl::GetFlag(FLAGS_proto_message_test_flag), EqualsProto(R"pb(
+                optional_int32: 31
+                optional_string: "str"
+                optional_nested_message { bb: 11 }
+              )pb"));
+
+  EXPECT_FALSE(flag->ParseFrom("xxx", &error));
+  EXPECT_THAT(error, HasSubstr(absl::StrFormat(
+                         "(Line 0, Column 3): Message type \"%s\" "
+                         "has no field named \"xxx\".",
+                         msg.GetTypeName())));
 }
 
 

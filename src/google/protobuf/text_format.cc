@@ -174,6 +174,29 @@ PROTOBUF_EXPORT std::string Utf8Format(const Message& message) {
 }
 
 
+bool Message::AbslParseFlagImpl(absl::string_view text, std::string& error) {
+  TextFormat::Parser parser;
+  struct StringErrorCollector : io::ErrorCollector {
+    explicit StringErrorCollector(std::string& error) : error(error) {}
+    std::string& error;
+    void RecordError(int line, io::ColumnNumber column,
+                     absl::string_view message) override {
+      error =
+          absl::StrFormat("(Line %v, Column %v): %v", line, column, message);
+    }
+  } collector(error);
+  parser.RecordErrorsTo(&collector);
+  return parser.ParseFromString(text, this);
+}
+
+std::string Message::AbslUnparseFlagImpl() const {
+  std::string str;
+  bool res = TextFormat::PrintToString(*this, &str);
+  // DO NOT SUBMIT: What to do here?!?
+  (void)res;
+  return str;
+}
+
 // ===========================================================================
 // Implementation of the parse information tree class.
 void TextFormat::ParseInfoTree::RecordLocation(
