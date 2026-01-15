@@ -270,6 +270,7 @@ enum ForeignEnumProto2 {
 
 extend TestAllTypesProto2 {
   optional int32 extension_int32 = 120;
+  optional string extension_string = 133;
 }
 
 extend TestAllTypesProto2 {
