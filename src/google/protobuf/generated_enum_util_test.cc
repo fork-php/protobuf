@@ -19,9 +19,13 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include "absl/container/btree_set.h"
+#include "absl/flags/commandlineflag.h"
+#include "absl/flags/flag.h"
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
 #include "google/protobuf/descriptor.h"
+#include "google/protobuf/unittest.pb.h"
+#include "google/protobuf/unittest_lite.pb.h"
 
 
 // Must be included last.
@@ -30,8 +34,14 @@
 using testing::_;
 using testing::ElementsAre;
 using testing::Gt;
+using testing::HasSubstr;
 using testing::IsEmpty;
 using testing::SizeIs;
+
+ABSL_FLAG(proto2_unittest::TestAllTypes::NestedEnum, test_proto_enum,
+          proto2_unittest::TestAllTypes::FOO, "");
+ABSL_FLAG(proto2_unittest::TestAllTypesLite::NestedEnum, test_proto_enum_lite,
+          proto2_unittest::TestAllTypesLite::FOO, "");
 
 namespace google {
 namespace protobuf {
@@ -145,6 +155,55 @@ TEST(GenerateEnumDataTest, BitmapSpaceOptimizationWorks) {
   encoded = GenerateEnumData(values);
   EXPECT_THAT(ExtractHeader(encoded), HeaderHas(0, 1, 256, 0));
   EXPECT_THAT(encoded, SizeIs(10));
+}
+
+TEST(ProtoEnumTest, HasAbseilFlagSupport) {
+  using T = proto2_unittest::TestAllTypes;
+
+  // The default
+  EXPECT_EQ(T::FOO, absl::GetFlag(FLAGS_test_proto_enum));
+  absl::SetFlag(&FLAGS_test_proto_enum, T::BAZ);
+  EXPECT_EQ(T::BAZ, absl::GetFlag(FLAGS_test_proto_enum));
+
+  absl::CommandLineFlag* flag = absl::FindCommandLineFlag("test_proto_enum");
+  EXPECT_EQ("BAZ", flag->CurrentValue());
+  std::string error;
+  EXPECT_TRUE(flag->ParseFrom("FOO", &error));
+  EXPECT_EQ(T::FOO, absl::GetFlag(FLAGS_test_proto_enum));
+  EXPECT_EQ("FOO", flag->CurrentValue());
+
+  EXPECT_TRUE(flag->ParseFrom("2", &error));
+  EXPECT_EQ(T::BAR, absl::GetFlag(FLAGS_test_proto_enum));
+  EXPECT_EQ("BAR", flag->CurrentValue());
+
+  EXPECT_FALSE(flag->ParseFrom("xxx", &error));
+  EXPECT_THAT(error, HasSubstr("Invalid value 'xxx' for enum "
+                               "'proto2_unittest.TestAllTypes.NestedEnum'. "
+                               "Supported values are: FOO, BAR, BAZ, NEG."));
+}
+
+TEST(ProtoEnumTest, HasAbseilFlagSupportWithLiteEnums) {
+  using T = proto2_unittest::TestAllTypesLite;
+
+  // The default
+  EXPECT_EQ(T::FOO, absl::GetFlag(FLAGS_test_proto_enum_lite));
+  absl::SetFlag(&FLAGS_test_proto_enum_lite, T::BAZ);
+  EXPECT_EQ(T::BAZ, absl::GetFlag(FLAGS_test_proto_enum_lite));
+
+  absl::CommandLineFlag* flag =
+      absl::FindCommandLineFlag("test_proto_enum_lite");
+  EXPECT_EQ("BAZ", flag->CurrentValue());
+  std::string error;
+  EXPECT_TRUE(flag->ParseFrom("FOO", &error));
+  EXPECT_EQ(T::FOO, absl::GetFlag(FLAGS_test_proto_enum_lite));
+  EXPECT_EQ("FOO", flag->CurrentValue());
+
+  EXPECT_TRUE(flag->ParseFrom("2", &error));
+  EXPECT_EQ(T::BAR, absl::GetFlag(FLAGS_test_proto_enum_lite));
+  EXPECT_EQ("BAR", flag->CurrentValue());
+
+  EXPECT_FALSE(flag->ParseFrom("xxx", &error));
+  // We don't check errors because we don't generate them for LITE.
 }
 
 void GatherValidValues(absl::Span<const uint32_t> data, int32_t min,

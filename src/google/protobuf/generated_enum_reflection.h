@@ -17,6 +17,7 @@
 #define GOOGLE_PROTOBUF_GENERATED_ENUM_REFLECTION_H__
 
 #include <string>
+#include <type_traits>
 
 #include "absl/strings/string_view.h"
 #include "google/protobuf/generated_enum_util.h"
@@ -71,6 +72,33 @@ PROTOBUF_FUTURE_ADD_EARLY_NODISCARD bool ParseNamedEnum(
 PROTOBUF_FUTURE_ADD_EARLY_NODISCARD
 PROTOBUF_EXPORT const std::string& NameOfEnum(
     const EnumDescriptor* PROTOBUF_NONNULL descriptor, int value);
+
+// Runtime implementation for Abseil flag support for enums.
+bool AbslParseFlagImpl(absl::string_view text, int& e,
+                       const EnumDescriptor& desc, std::string& error);
+std::string AbslUnparseFlagImpl(int e, const EnumDescriptor& desc);
+
+namespace generated_enum {
+// We inject these functions in the user namespace to allow for ADL on the
+// enums.
+// These overloads handle reflection based enums.
+template <typename Enum, typename = EnableIfProtoEnum<Enum, false>>
+bool AbslParseFlag(absl::string_view text, Enum* PROTOBUF_NONNULL e,
+                   std::string* PROTOBUF_NONNULL error) {
+  int value;
+  if (internal::AbslParseFlagImpl(text, value, *GetEnumDescriptor<Enum>(),
+                                  *error)) {
+    *e = static_cast<Enum>(value);
+    return true;
+  }
+  return false;
+}
+
+template <typename Enum, typename = EnableIfProtoEnum<Enum, false>>
+std::string AbslUnparseFlag(Enum e) {
+  return internal::AbslUnparseFlagImpl(e, *GetEnumDescriptor<Enum>());
+}
+}  // namespace generated_enum
 
 }  // namespace internal
 }  // namespace protobuf

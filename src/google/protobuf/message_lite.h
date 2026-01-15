@@ -305,6 +305,11 @@ struct EnumTraitsImpl {
 template <typename T>
 using EnumTraits = decltype(EnumTraitsImpl::value<T>);
 
+template <typename T>
+struct LiteEnumFuncs {
+  static constexpr bool kIsDefined = false;
+};
+
 class SwapFieldHelper;
 
 // See parse_context.h for explanation
