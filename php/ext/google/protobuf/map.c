@@ -201,7 +201,7 @@ upb_Map* MapField_GetUpbMap(zval* val, MapField_Type type, upb_Arena* arena) {
         return OutOfMemory();
       }
       zend_hash_move_forward_ex(table, &pos);
-      zval_dtor(&php_key);
+      zval_ptr_dtor_nogc(&php_key);
     }
   } else if (Z_TYPE_P(val) == IS_OBJECT &&
              Z_OBJCE_P(val) == MapField_class_entry) {
