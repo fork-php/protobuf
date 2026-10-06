@@ -1306,7 +1306,7 @@ PHP_METHOD(google_protobuf_Any, unpack) {
   Message* msg = (Message*)obj;
   ZVAL_OBJ(&ret, obj);
   if (!Message_Initialize(msg, desc)) {
-    zval_dtor(&ret);
+    zval_ptr_dtor_nogc(&ret);
     return;
   }
 
@@ -1317,7 +1317,7 @@ PHP_METHOD(google_protobuf_Any, unpack) {
                  Arena_Get(&msg->arena));
   if (status == kUpb_DecodeStatus_OutOfMemory) {
     OutOfMemory();
-    zval_dtor(&ret);
+    zval_ptr_dtor_nogc(&ret);
     return;
   }
   if (status != kUpb_DecodeStatus_Ok) {
